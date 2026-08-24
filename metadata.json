@@ -1,6 +1,6 @@
 {
-  "name": "Мои проекты",
-  "description": "Персональная стартовая страница и каталог AI-агентов для удобного запуска и размещения на VDS",
+  "name": "Библиотека проектов",
+  "description": "Стартовая страница и каталог AI-агентов с защитой авторизацией",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

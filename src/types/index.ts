@@ -50,4 +50,4 @@ export interface SiteConfig {
   footerText: string;
 }
 
-export type TabType = 'projects' | 'contacts';
+export type TabType = 'projects' | 'contacts' | 'auth';

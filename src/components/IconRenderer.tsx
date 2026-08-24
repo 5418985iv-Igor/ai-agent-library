@@ -1,6 +1,7 @@
 import React from 'react';
 import {
   Bot,
+  BookOpenText,
   BarChart3,
   Code2,
   FileText,
@@ -33,6 +34,7 @@ interface IconRendererProps extends LucideProps {
 export const IconRenderer: React.FC<IconRendererProps> = ({ name, ...props }) => {
   const iconMap: Record<string, React.ElementType> = {
     Bot,
+    BookOpenText,
     BarChart3,
     BarChart: BarChart3,
     Code2,

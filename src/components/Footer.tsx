@@ -12,11 +12,7 @@ export const Footer: React.FC = () => {
           <span>{SITE_CONFIG.footerText}</span>
         </div>
 
-        {/* VDS Server Status Indicator */}
-        <div className="flex items-center gap-2 font-mono text-slate-600 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200/80">
-          <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse shrink-0" />
-          <span>Server Status: Running on Linux VDS</span>
-        </div>
+        
       </div>
     </footer>
   );
