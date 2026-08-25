@@ -20,8 +20,8 @@ export default function App() {
   });
 
   const handleSelectProject = (project: Project) => {
-    if (isAuthenticated) {
-      // User is already authorized, directly open project link
+    if (isAuthenticated || project.requiresAuth === false) {
+      // User is already authorized or project does not require auth, directly open project link
       window.open(project.url, '_blank', 'noopener,noreferrer');
     } else {
       // Prompt for authorization first

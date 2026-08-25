@@ -19,6 +19,7 @@ export interface Project {
   badge?: string;
   colorTheme?: ProjectColorTheme;
   isInternal?: boolean;
+  requiresAuth?: boolean;
 }
 
 export interface SocialLink {

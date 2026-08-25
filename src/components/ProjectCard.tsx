@@ -68,8 +68,8 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
       {/* Button Open */}
       <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between gap-2">
         <div className="w-full bg-slate-50 border border-slate-200 py-2.5 px-4 rounded-xl text-center text-sm font-semibold text-slate-800 flex items-center justify-center gap-2 group-hover:bg-indigo-600 group-hover:text-white group-hover:border-indigo-600 transition-all duration-150">
-          <span>{isAuthenticated ? 'Открыть проект' : 'Авторизоваться и открыть'}</span>
-          {isAuthenticated ? (
+          <span>{isAuthenticated || project.requiresAuth === false ? 'Открыть проект' : 'Авторизоваться и открыть'}</span>
+          {isAuthenticated || project.requiresAuth === false ? (
             <ExternalLink className="w-3.5 h-3.5" />
           ) : (
             <Lock className="w-3.5 h-3.5" />

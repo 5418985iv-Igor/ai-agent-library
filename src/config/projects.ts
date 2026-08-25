@@ -24,10 +24,11 @@ export const PROJECTS_CONFIG: Project[] = [
     title: 'База знаний по стандартам',
     description: 'База знаний по стандартам компании',
     icon: 'BookOpenText',
-    url: 'https://chatgpt.com',
+    url: 'https://rag.vivonline.ru/',
     category: 'База знаний',
     badge: 'GPT-4o',
     colorTheme: 'indigo',
+    requiresAuth: false,
   },
  {
     id: 'query-developer',
