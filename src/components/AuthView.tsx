@@ -57,10 +57,10 @@ export const AuthView: React.FC<AuthViewProps> = ({
         localStorage.setItem('is_projects_authenticated', 'true');
       }
 
-      // Small delay for success animation
+      // Short delay for success feedback while preserving user gesture
       setTimeout(() => {
         onAuthSuccess();
-      }, 400);
+      }, 150);
     } else {
       setError('Неверный пароль. Пожалуйста, проверьте правильность ввода.');
       inputRef.current?.select();

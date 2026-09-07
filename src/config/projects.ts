@@ -15,6 +15,7 @@ import { Project } from '../types';
  *   category: "Категория",                // Опционально: "AI-Ассистенты", "Разработка", "Аналитика", "Тексты" и т.д.
  *   badge: "GPT-4o",                      // Опционально: бейдж в углу карточки
  *   colorTheme: "indigo",                 // Опционально: indigo, emerald, blue, purple, amber, rose, cyan, violet, teal
+ *   promptFile: "/prompts/my-agent.txt",  // Опционально: путь к файлу промпта в public/prompts/
  * }
  */
 
@@ -30,15 +31,16 @@ export const PROJECTS_CONFIG: Project[] = [
     colorTheme: 'indigo',
     requiresAuth: false,
   },
- {
+  {
     id: 'query-developer',
-    title: 'AI Разработка запросов 1С',
-    description: 'Опытный разработчик 1С с глубокой экспертизой в языке запросов. Твоя задача — помогать писать и оптимизировать сложные запросы в 1С..',
+    title: 'Разработчик запросов 1С',
+    description: 'AI-помощник для разработки, анализа и оптимизации запросов 1С.',
     icon: 'Bot',
     url: 'https://chatgpt.com',
     category: 'Разработка',
-    badge: 'GPT-4o',
+    badge: '1С AI',
     colorTheme: 'indigo',
+    promptFile: '/prompts/query-developer.txt',
   },
   {
     id: 'developer-forms',
@@ -49,6 +51,7 @@ export const PROJECTS_CONFIG: Project[] = [
     category: 'Разработка',
     badge: 'Data & SQL',
     colorTheme: 'emerald',
+    promptFile: '/prompts/developer-forms.txt',
   },
   {
     id: 'developer-integration',
@@ -59,6 +62,7 @@ export const PROJECTS_CONFIG: Project[] = [
     category: 'Разработка',
     badge: 'Dev Tools',
     colorTheme: 'blue',
+    promptFile: '/prompts/developer-integration.txt',
   },
   {
     id: 'code-review-1c',
@@ -69,6 +73,7 @@ export const PROJECTS_CONFIG: Project[] = [
     category: 'Тексты',
     badge: 'Writing',
     colorTheme: 'purple',
+    promptFile: '/prompts/code-review-1c.txt',
   },
   {
     id: 'prompt-engineer',
@@ -79,6 +84,7 @@ export const PROJECTS_CONFIG: Project[] = [
     category: 'Ассистенты',
     badge: 'Prompt Lab',
     colorTheme: 'teal',
+    promptFile: '/prompts/prompt-engineer.txt',
   },
   {
     id: 'developer-architecture',
@@ -89,5 +95,17 @@ export const PROJECTS_CONFIG: Project[] = [
     category: 'Разработка',
     badge: 'Strategy',
     colorTheme: 'amber',
+    promptFile: '/prompts/developer-architecture.txt',
+  },
+  {
+    id: 'ut-consultant',
+    title: 'Консультант 1С:УТ',
+    description: 'Методология учета, торговые процессы, склад, взаиморасчеты и закрытие месяца в 1С:Управление торговлей.',
+    icon: 'HelpCircle',
+    url: 'https://chatgpt.com',
+    category: 'Консультации',
+    badge: '1С:УТ',
+    colorTheme: 'cyan',
+    promptFile: '/prompts/ut-consultant.txt',
   },
 ];

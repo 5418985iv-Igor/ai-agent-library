@@ -20,6 +20,8 @@ export interface Project {
   colorTheme?: ProjectColorTheme;
   isInternal?: boolean;
   requiresAuth?: boolean;
+  prompt?: string;
+  promptFile?: string;
 }
 
 export interface SocialLink {
@@ -52,3 +54,21 @@ export interface SiteConfig {
 }
 
 export type TabType = 'projects' | 'contacts' | 'auth';
+
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  timestamp?: number;
+  isError?: boolean;
+}
+
+export interface AgentChatConfig {
+  agentId: string;
+  title: string;
+  description: string;
+  initialMessage?: string;
+  placeholder?: string;
+  suggestedPrompts?: string[];
+  icon?: string;
+}

@@ -1,6 +1,6 @@
 {
   "name": "Библиотека проектов",
   "description": "Стартовая страница и каталог AI-агентов с защитой авторизацией",
-  "requestFramePermissions": [],
+  "requestFramePermissions": ["microphone"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
