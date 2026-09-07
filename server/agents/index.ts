@@ -64,15 +64,23 @@ export function getAgentSystemPrompt(agentId: string): string {
     throw new Error(`Неизвестный агент: ${agentId}`);
   }
 
-  const promptPath = path.join(process.cwd(), 'server', 'prompts', agent.promptFile);
+  const candidatePaths = [
+    path.join(process.cwd(), 'server', 'prompts', agent.promptFile),
+    path.join(process.cwd(), 'dist', 'prompts', agent.promptFile),
+    path.join(process.cwd(), 'public', 'prompts', agent.promptFile),
+  ];
 
-  try {
-    if (fs.existsSync(promptPath)) {
-      const content = fs.readFileSync(promptPath, 'utf-8').trim();
-      return content || `Вы полезный AI-ассистент: ${agent.name}.`;
+  for (const promptPath of candidatePaths) {
+    try {
+      if (fs.existsSync(promptPath)) {
+        const content = fs.readFileSync(promptPath, 'utf-8').trim();
+        if (content) {
+          return content;
+        }
+      }
+    } catch (error) {
+      console.error(`[Prompts] Ошибка чтения файла промпта ${promptPath}:`, error);
     }
-  } catch (error) {
-    console.error(`[Prompts] Ошибка чтения файла промпта ${promptPath}:`, error);
   }
 
   return `Вы полезный AI-ассистент: ${agent.name}.`;

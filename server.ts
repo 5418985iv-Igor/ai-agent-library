@@ -1,21 +1,52 @@
 import express from 'express';
 import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
-import { createServer as createViteServer } from 'vite';
 import { REGISTERED_AGENTS, getAgentSystemPrompt } from './server/agents/index';
 import { generateChatResponse, ChatMessage } from './server/openai';
 
 dotenv.config();
 
+// Безопасное получение пути к текущему файлу для ESM и CJS
+const currentFilename =
+  typeof __filename !== 'undefined'
+    ? __filename
+    : fileURLToPath(import.meta.url);
+const currentDirname =
+  typeof __dirname !== 'undefined'
+    ? __dirname
+    : path.dirname(currentFilename);
+
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+
+  // Определяем среду выполнения:
+  // 1. В dev-контейнере Google AI Studio reverse proxy (nginx) жестко настроен на порт 3000.
+  // 2. При деплое на сервер (Google Cloud Run, VPS с Nginx/Docker, Render, Heroku и др.)
+  //    хост передаёт нужный порт в переменной окружения PORT (например, Cloud Run слушает 8080).
+  const isAiStudioDev = Boolean(process.env.CONTROL_PLANE_PORT || process.env.DEFAULT_APP_PORT);
+  const PORT = isAiStudioDev
+    ? 3000
+    : (process.env.PORT ? parseInt(process.env.PORT, 10) : 3000);
+
+  // Определение production:
+  // Если запущена скомпилированная сборка dist/server.cjs или NODE_ENV === 'production'
+  const isProduction =
+    process.env.NODE_ENV === 'production' ||
+    currentFilename.endsWith('.cjs') ||
+    currentFilename.endsWith('.js');
 
   app.use(express.json({ limit: '5mb' }));
 
-  // API Health Check
-  app.get('/api/health', (_req, res) => {
-    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  // Health Check endpoints (необходимы для Cloud Run, Docker и Nginx upstream healthcheck)
+  app.get(['/health', '/api/health'], (_req, res) => {
+    res.json({
+      status: 'ok',
+      port: PORT,
+      environment: isProduction ? 'production' : 'development',
+      timestamp: new Date().toISOString(),
+    });
   });
 
   // API Registered Agents Info
@@ -112,23 +143,79 @@ async function startServer() {
   });
 
   // Vite middleware for development vs static build in production
-  if (process.env.NODE_ENV !== 'production') {
+  if (!isProduction) {
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), 'dist');
+    // В production раздаём статические файлы из директории dist
+    const candidateDistPaths = [
+      path.join(process.cwd(), 'dist'),
+      currentDirname,
+      path.resolve(currentDirname, '..', 'dist'),
+    ];
+    const distPath =
+      candidateDistPaths.find((p) => fs.existsSync(path.join(p, 'index.html'))) ||
+      candidateDistPaths[0];
+
     app.use(express.static(distPath));
+
     app.get('*', (_req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
+      const indexPath = path.join(distPath, 'index.html');
+      if (fs.existsSync(indexPath)) {
+        res.sendFile(indexPath);
+      } else {
+        res
+          .status(404)
+          .send('Сборка приложения не найдена. Пожалуйста, выполните "npm run build".');
+      }
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server running on http://0.0.0.0:${PORT}`);
+  // Обработчик непредвиденных ошибок Express
+  app.use(
+    (
+      err: any,
+      _req: express.Request,
+      res: express.Response,
+      _next: express.NextFunction
+    ) => {
+      console.error('[Unhandled Server Error]:', err);
+      if (!res.headersSent) {
+        res.status(500).json({
+          error: 'Внутренняя ошибка сервера',
+          message: err?.message || 'Unknown error',
+        });
+      }
+    }
+  );
+
+  const server = app.listen(PORT, '0.0.0.0', () => {
+    console.log(
+      `[Server] Запущен на http://0.0.0.0:${PORT} (${
+        isProduction ? 'PRODUCTION' : 'DEVELOPMENT'
+      })`
+    );
   });
+
+  // Корректное завершение работы при сигналах контейнера (Cloud Run, Docker, Kubernetes)
+  const shutdown = (signal: string) => {
+    console.log(`[Server] Получен сигнал ${signal}, завершение работы...`);
+    server.close(() => {
+      console.log('[Server] Сервер успешно остановлен.');
+      process.exit(0);
+    });
+    setTimeout(() => {
+      console.error('[Server] Принудительное завершение по таймауту.');
+      process.exit(1);
+    }, 5000);
+  };
+
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
 }
 
 startServer().catch((err) => {
