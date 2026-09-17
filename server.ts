@@ -7,6 +7,9 @@ import { REGISTERED_AGENTS, getAgentSystemPrompt } from './server/agents/index';
 import { generateChatResponse, ChatMessage } from './server/openai';
 
 dotenv.config();
+if (fs.existsSync(path.resolve(process.cwd(), '.env.local'))) {
+  dotenv.config({ path: path.resolve(process.cwd(), '.env.local'), override: true });
+}
 
 // Безопасное получение пути к текущему файлу для ESM и CJS
 const currentFilename =
@@ -57,6 +60,51 @@ async function startServer() {
       description: agent.description,
     }));
     res.json({ agents: list });
+  });
+
+  // API Auth Status Endpoint (проверка, настроен ли пароль в .env)
+  app.get('/api/auth/status', (_req, res) => {
+    const configuredPassword =
+      process.env.VITE_PROJECTS_PASSWORD || process.env.PROJECTS_PASSWORD;
+    const isConfigured = Boolean(
+      configuredPassword && configuredPassword.trim() !== ''
+    );
+    res.json({
+      configured: isConfigured,
+    });
+  });
+
+  // API Auth Verify Endpoint (строгая проверка пароля только из .env сервера, без дефолтов)
+  app.post('/api/auth/verify', (req, res) => {
+    const { password } = req.body || {};
+    const configuredPassword =
+      process.env.VITE_PROJECTS_PASSWORD || process.env.PROJECTS_PASSWORD;
+
+    // Если пароль в env не задан — доступ блокируется, дефолтов нет
+    if (!configuredPassword || configuredPassword.trim() === '') {
+      return res.status(500).json({
+        success: false,
+        error:
+          'Пароль доступа не настроен на сервере. Пожалуйста, укажите значение переменной VITE_PROJECTS_PASSWORD в файле .env.',
+      });
+    }
+
+    if (typeof password !== 'string' || !password.trim()) {
+      return res.status(400).json({
+        success: false,
+        error: 'Пожалуйста, введите пароль для доступа.',
+      });
+    }
+
+    // Точное сравнение пароля из запроса с паролем из env
+    if (password.trim() === configuredPassword.trim()) {
+      return res.json({ success: true });
+    } else {
+      return res.status(401).json({
+        success: false,
+        error: 'Неверный пароль. Пожалуйста, проверьте правильность ввода.',
+      });
+    }
   });
 
   // API Chat Endpoint

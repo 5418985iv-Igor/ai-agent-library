@@ -1,6 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Lock, KeyRound, Eye, EyeOff, ArrowLeft, ShieldCheck, AlertCircle, Sparkles, CheckCircle2 } from 'lucide-react';
+import {
+  Lock,
+  KeyRound,
+  Eye,
+  EyeOff,
+  ArrowLeft,
+  ShieldCheck,
+  AlertCircle,
+  CheckCircle2,
+  Loader2,
+} from 'lucide-react';
 import { Project } from '../types';
 import { IconRenderer } from './IconRenderer';
 
@@ -19,6 +29,8 @@ export const AuthView: React.FC<AuthViewProps> = ({
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isConfiguredOnServer, setIsConfiguredOnServer] = useState<boolean | null>(null);
   const [isCapsOn, setIsCapsOn] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -26,6 +38,23 @@ export const AuthView: React.FC<AuthViewProps> = ({
   useEffect(() => {
     // Focus password input on mount
     inputRef.current?.focus();
+
+    // Проверяем статус конфигурации пароля на сервере
+    let isMounted = true;
+    fetch('/api/auth/status')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (isMounted && data && typeof data.configured === 'boolean') {
+          setIsConfiguredOnServer(data.configured);
+        }
+      })
+      .catch(() => {
+        // Игнорируем сетевые ошибки при фоновом запросе статуса
+      });
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const handleKeyUp = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -34,36 +63,89 @@ export const AuthView: React.FC<AuthViewProps> = ({
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSuccess = () => {
+    setIsSuccess(true);
+    setError(null);
+
+    // Save auth state
+    sessionStorage.setItem('is_projects_authenticated', 'true');
+    if (rememberMe) {
+      localStorage.setItem('is_projects_authenticated', 'true');
+    }
+
+    // Short delay for success feedback while preserving user gesture
+    setTimeout(() => {
+      onAuthSuccess();
+    }, 150);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
-    // Get expected password from environment variable or fallback
-    const expectedPassword = import.meta.env.VITE_PROJECTS_PASSWORD || 'admin';
+    const enteredPassword = password.trim();
 
-    if (!password) {
+    if (!enteredPassword) {
       setError('Пожалуйста, введите пароль для доступа.');
       inputRef.current?.focus();
       return;
     }
 
-    if (password.trim() === expectedPassword.trim()) {
-      setIsSuccess(true);
-      setError(null);
+    setIsLoading(true);
 
-      // Save auth state
-      sessionStorage.setItem('is_projects_authenticated', 'true');
-      if (rememberMe) {
-        localStorage.setItem('is_projects_authenticated', 'true');
+    try {
+      // 1. Проверяем пароль через серверный API /api/auth/verify (пароль берётся строго из env сервера)
+      const response = await fetch('/api/auth/verify', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ password: enteredPassword }),
+      });
+
+      const data = await response.json().catch(() => null);
+
+      if (response.ok && data?.success) {
+        handleSuccess();
+        return;
       }
 
-      // Short delay for success feedback while preserving user gesture
-      setTimeout(() => {
-        onAuthSuccess();
-      }, 150);
-    } else {
-      setError('Неверный пароль. Пожалуйста, проверьте правильность ввода.');
+      if (data?.error) {
+        setError(data.error);
+        inputRef.current?.select();
+        return;
+      }
+
+      if (response.status === 401) {
+        setError('Неверный пароль. Пожалуйста, проверьте правильность ввода.');
+        inputRef.current?.select();
+        return;
+      }
+
+      throw new Error(`Ошибка сервера (${response.status})`);
+    } catch (err) {
+      // 2. Резервная проверка только при сбое сети или автономном SPA режиме:
+      // ВНИМАНИЕ: Пароли по умолчанию (например, 'admin') строго запрещены!
+      // Значение берётся исключительно из VITE_PROJECTS_PASSWORD, если переменная задана.
+      const clientEnvPassword = import.meta.env.VITE_PROJECTS_PASSWORD;
+
+      if (clientEnvPassword && typeof clientEnvPassword === 'string' && clientEnvPassword.trim() !== '') {
+        if (enteredPassword === clientEnvPassword.trim()) {
+          handleSuccess();
+          return;
+        } else {
+          setError('Неверный пароль. Пожалуйста, проверьте правильность ввода.');
+          inputRef.current?.select();
+          return;
+        }
+      }
+
+      setError(
+        'Пароль доступа не настроен в .env на сервере. Укажите переменную VITE_PROJECTS_PASSWORD в файле .env.'
+      );
       inputRef.current?.select();
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -184,6 +266,16 @@ export const AuthView: React.FC<AuthViewProps> = ({
                 </p>
               )}
 
+              {/* Notice if password is not configured in .env on server */}
+              {isConfiguredOnServer === false && (
+                <div className="mt-2 text-xs text-amber-800 bg-amber-50 border border-amber-200/80 rounded-lg p-3 flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-semibold">Внимание:</span> в файле <code className="bg-amber-100/70 px-1 py-0.5 rounded font-mono text-[11px]">.env</code> на сервере не задана переменная <code className="bg-amber-100/70 px-1 py-0.5 rounded font-mono text-[11px]">VITE_PROJECTS_PASSWORD</code>. Доступ по умолчанию отключен.
+                  </div>
+                </div>
+              )}
+
               {/* Error Message */}
               <AnimatePresence>
                 {error && (
@@ -219,10 +311,12 @@ export const AuthView: React.FC<AuthViewProps> = ({
               <button
                 id="submit-auth-button"
                 type="submit"
-                disabled={isSuccess}
+                disabled={isSuccess || isLoading}
                 className={`w-full flex-1 py-2.5 px-4 rounded-xl text-sm font-semibold text-white flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm ${
                   isSuccess
                     ? 'bg-emerald-600 hover:bg-emerald-700'
+                    : isLoading
+                    ? 'bg-indigo-400 cursor-wait'
                     : 'bg-indigo-600 hover:bg-indigo-700 active:scale-[0.99]'
                 }`}
               >
@@ -230,6 +324,11 @@ export const AuthView: React.FC<AuthViewProps> = ({
                   <>
                     <CheckCircle2 className="w-4 h-4 animate-bounce" />
                     <span>Успешно! Открываем...</span>
+                  </>
+                ) : isLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Проверка пароля...</span>
                   </>
                 ) : (
                   <>

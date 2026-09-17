@@ -32,6 +32,17 @@ export const PROJECTS_CONFIG: Project[] = [
     requiresAuth: false,
   },
   {
+    id: 'transcription-meetings',
+    title: 'Ю-Терм. Протоколы совещаний',
+    description: 'Автоматическая расшифровка встреч через GigaSTT (модель GigaAM-v3) с нормализацией текста и формированием кратких протоколов.',
+    icon: 'Globe',
+    url: 'https://vivonline.ru/meetings',
+    category: 'Помощники',
+    badge: '1С AI',
+    colorTheme: 'indigo',
+    requiresAuth: false,
+  },
+   {
     id: 'query-developer',
     title: 'Разработчик запросов 1С',
     description: 'AI-помощник для разработки, анализа и оптимизации запросов 1С.',
