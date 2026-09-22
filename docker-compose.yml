@@ -4,6 +4,6 @@ services:
     container_name: ai-agent-library
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "127.0.0.1:8080:3000"
     env_file:
       - .env
