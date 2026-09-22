@@ -1,0 +1,9 @@
+services:
+  ai-agent-library:
+    build: .
+    container_name: ai-agent-library
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
