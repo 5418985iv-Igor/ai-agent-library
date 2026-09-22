@@ -98,25 +98,54 @@ export const CONTACTS_CONFIG = {
 
 ## 🌐 Размещение на VDS за Nginx
 
-Приложение представляет собой чистый статический SPA frontend, не требующий базы данных или NodeJS на сервере во время работы.
+Приложение работает как быстрый full-stack сервис на базе Node.js (раздает интерфейс и обрабатывает API авторизации и AI-агентов):
 
-### Шаг 1. Соберите проект на локальном компьютере
+### Шаг 1. Сборка проекта
+
+Выполните сборку на сервере или локально:
 
 ```bash
 npm run build
 ```
 
-В папке `dist/` появятся готовые `index.html`, файлы JS, CSS и ассеты.
+Сборка создаст клиентские файлы и серверный файл `dist/server.cjs`.
 
-### Шаг 2. Загрузите файлы на ваш VDS
+### Шаг 2. Настройка файла переменных окружения (.env)
 
-Скопируйте содержимое папки `dist/` на сервер (например, в `/var/www/my-projects`):
+В папке проекта на сервере создайте файл `.env`:
 
 ```bash
-rsync -avz --delete dist/ user@your-vds-ip:/var/www/my-projects/
+nano .env
 ```
 
-### Шаг 3. Настройте конфигурацию Nginx
+Укажите ваш пароль доступа и (при необходимости) ключ OpenAI:
+
+```env
+VITE_PROJECTS_PASSWORD=ваш_пароль
+OPENAI_API_KEY=ваш_openai_ключ
+PORT=3000
+```
+
+> **Важно**: Имя файла должно быть строго `.env` (с точкой в начале). Сервер автоматически ищет его как в текущей директории, так и в родительской.
+
+### Шаг 3. Запуск сервера (PM2 или systemd)
+
+Рекомендуется запускать сервер через менеджер процессов **PM2**:
+
+```bash
+npm install -g pm2
+pm2 start dist/server.cjs --name "my-projects"
+pm2 save
+pm2 startup
+```
+
+Или прямой запуск через Node.js:
+
+```bash
+node dist/server.cjs
+```
+
+### Шаг 4. Настройка Nginx в качестве Reverse Proxy
 
 Создайте конфигурационный файл на VDS:
 
@@ -124,31 +153,35 @@ rsync -avz --delete dist/ user@your-vds-ip:/var/www/my-projects/
 sudo nano /etc/nginx/sites-available/my-projects
 ```
 
-Вставьте следующую конфигурацию:
+Вставьте следующую конфигурацию с проксированием на локальный Node.js сервер:
 
 ```nginx
 server {
     listen 80;
     server_name your-domain.com www.your-domain.com;
 
-    root /var/www/my-projects;
-    index index.html;
-
-    # Gzip сжатие для быстрой загрузки
+    # Gzip сжатие
     gzip on;
     gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript;
 
     location / {
-        try_files $uri $uri/ /index.html;
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
     }
 
-    # Кэширование статических ассетов
+    # Кэширование статических файлов
     location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
+        proxy_pass http://127.0.0.1:3000;
         expires 1y;
         add_header Cache-Control "public, no-transform";
     }
-
-    error_page 404 /index.html;
 }
 ```
 
@@ -160,11 +193,11 @@ sudo nginx -t
 sudo systemctl restart nginx
 ```
 
-### Шаг 4. Подключите бесплатный SSL-сертификат (Let's Encrypt)
+### Шаг 5. Подключите бесплатный SSL-сертификат (Let's Encrypt)
 
 ```bash
 sudo apt install certbot python3-certbot-nginx -y
 sudo certbot --nginx -d your-domain.com -d www.your-domain.com
 ```
 
-Готово! Теперь ваша персональная страница запуска AI-агентов доступна по вашему защищенному домену `https://your-domain.com`.
+Готово! Теперь ваша страница проектов и AI-агентов доступна по вашему защищенному домену `https://your-domain.com`.

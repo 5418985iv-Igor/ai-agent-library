@@ -6,11 +6,6 @@ import dotenv from 'dotenv';
 import { REGISTERED_AGENTS, getAgentSystemPrompt } from './server/agents/index';
 import { generateChatResponse, ChatMessage } from './server/openai';
 
-dotenv.config();
-if (fs.existsSync(path.resolve(process.cwd(), '.env.local'))) {
-  dotenv.config({ path: path.resolve(process.cwd(), '.env.local'), override: true });
-}
-
 // Безопасное получение пути к текущему файлу для ESM и CJS
 const currentFilename =
   typeof __filename !== 'undefined'
@@ -20,6 +15,138 @@ const currentDirname =
   typeof __dirname !== 'undefined'
     ? __dirname
     : path.dirname(currentFilename);
+
+/**
+ * Получение всех возможных путей к файлам конфигурации env:
+ * Поддерживает запуск из корня, из подкаталога dist (на VDS),
+ * через PM2/systemd с любым working directory, а также файлы .env и env (без точки).
+ */
+function getAllEnvCandidatePaths(): string[] {
+  const candidateDirs = [
+    process.cwd(),
+    currentDirname,
+    path.resolve(currentDirname, '..'),
+    path.resolve(process.cwd(), '..'),
+    path.resolve(currentDirname, '../..'),
+  ];
+
+  const candidateFilenames = [
+    '.env',
+    'env',
+    '.env.local',
+    'env.local',
+    '.env.production',
+    'env.production',
+  ];
+
+  const paths: string[] = [];
+  const seen = new Set<string>();
+
+  for (const dir of candidateDirs) {
+    for (const file of candidateFilenames) {
+      const fullPath = path.resolve(dir, file);
+      if (!seen.has(fullPath)) {
+        seen.add(fullPath);
+        paths.push(fullPath);
+      }
+    }
+  }
+  return paths;
+}
+
+/**
+ * Загрузка всех найденных файлов env в process.env при старте
+ */
+function loadAllEnvFiles(): void {
+  const candidatePaths = getAllEnvCandidatePaths();
+  for (const filePath of candidatePaths) {
+    if (fs.existsSync(filePath)) {
+      try {
+        const content = fs.readFileSync(filePath, 'utf-8');
+        const parsed = dotenv.parse(content);
+        for (const [key, value] of Object.entries(parsed)) {
+          if (!process.env[key] || process.env[key]?.trim() === '') {
+            process.env[key] = value;
+          }
+        }
+      } catch (err) {
+        console.warn(`[Env] Ошибка чтения файла ${filePath}:`, err);
+      }
+    }
+  }
+}
+
+// Первичная загрузка env при старте сервера
+loadAllEnvFiles();
+
+/**
+ * Получение пароля доступа из process.env или непосредственно с диска (для динамического обновления)
+ */
+function getConfiguredPassword(): string | null {
+  const possibleKeys = [
+    'VITE_PROJECTS_PASSWORD',
+    'PROJECTS_PASSWORD',
+    'PROJECT_PASSWORD',
+  ];
+
+  // 1. Проверяем переменные в process.env
+  for (const key of possibleKeys) {
+    const val = process.env[key];
+    if (val && typeof val === 'string' && val.trim() !== '') {
+      return val.trim();
+    }
+  }
+
+  // 2. Если в process.env не задано, сканируем файлы конфигурации на диске
+  // (актуально, если на VDS файл назван env без точки, находится в родительском каталоге или был отредактирован без перезапуска сервера)
+  const candidatePaths = getAllEnvCandidatePaths();
+
+  for (const filePath of candidatePaths) {
+    if (fs.existsSync(filePath)) {
+      try {
+        const content = fs.readFileSync(filePath, 'utf-8');
+        const parsed = dotenv.parse(content);
+
+        // Обновляем process.env
+        for (const [k, v] of Object.entries(parsed)) {
+          process.env[k] = v;
+        }
+
+        for (const key of possibleKeys) {
+          const val = parsed[key];
+          if (val && typeof val === 'string' && val.trim() !== '') {
+            const cleanVal = val.replace(/^["'](.*)["']$/, '$1').trim();
+            if (cleanVal) {
+              process.env[key] = cleanVal;
+              return cleanVal;
+            }
+          }
+        }
+
+        // Строчный разбор regex на случай кастомного синтаксиса (например, VITE_PROJECTS_PASSWORD: 1234 или export)
+        for (const line of content.split(/\r?\n/)) {
+          const trimmed = line.trim();
+          if (!trimmed || trimmed.startsWith('#')) continue;
+          const match = trimmed.match(
+            /^(?:export\s+)?(VITE_PROJECTS_PASSWORD|PROJECTS_PASSWORD|PROJECT_PASSWORD)\s*[:=]\s*(.*)$/
+          );
+          if (match) {
+            let val = match[2].trim();
+            val = val.replace(/^["'](.*)["']$/, '$1').trim();
+            if (val) {
+              process.env[match[1]] = val;
+              return val;
+            }
+          }
+        }
+      } catch (err) {
+        console.warn(`[Auth] Ошибка при чтении файла конфигурации ${filePath}:`, err);
+      }
+    }
+  }
+
+  return null;
+}
 
 async function startServer() {
   const app = express();
@@ -64,8 +191,7 @@ async function startServer() {
 
   // API Auth Status Endpoint (проверка, настроен ли пароль в .env)
   app.get('/api/auth/status', (_req, res) => {
-    const configuredPassword =
-      process.env.VITE_PROJECTS_PASSWORD || process.env.PROJECTS_PASSWORD;
+    const configuredPassword = getConfiguredPassword();
     const isConfigured = Boolean(
       configuredPassword && configuredPassword.trim() !== ''
     );
@@ -77,15 +203,22 @@ async function startServer() {
   // API Auth Verify Endpoint (строгая проверка пароля только из .env сервера, без дефолтов)
   app.post('/api/auth/verify', (req, res) => {
     const { password } = req.body || {};
-    const configuredPassword =
-      process.env.VITE_PROJECTS_PASSWORD || process.env.PROJECTS_PASSWORD;
+    const configuredPassword = getConfiguredPassword();
 
     // Если пароль в env не задан — доступ блокируется, дефолтов нет
     if (!configuredPassword || configuredPassword.trim() === '') {
+      const candidatePaths = getAllEnvCandidatePaths();
+      const existingEnvFiles = candidatePaths.filter((p) => fs.existsSync(p));
+      const diagnosticInfo =
+        existingEnvFiles.length > 0
+          ? `Обнаружены файлы конфигурации: [${existingEnvFiles.map((p) => path.basename(p)).join(', ')}], но в них не найдена переменная VITE_PROJECTS_PASSWORD.`
+          : `Файл .env не найден ни в текущей папке (${process.cwd()}), ни в корне приложения (${path.resolve(currentDirname, '..')}).`;
+
+      console.warn(`[Auth Verify Failed] ${diagnosticInfo}`);
+
       return res.status(500).json({
         success: false,
-        error:
-          'Пароль доступа не настроен на сервере. Пожалуйста, укажите значение переменной VITE_PROJECTS_PASSWORD в файле .env.',
+        error: `Пароль доступа не настроен на сервере. ${diagnosticInfo} Пожалуйста, убедитесь, что файл называется .env и содержит строку: VITE_PROJECTS_PASSWORD=ваш_пароль`,
       });
     }
 
